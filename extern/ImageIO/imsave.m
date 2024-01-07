@@ -4,10 +4,34 @@ function status = imsave(file, data, info)
 % Input:
 %   - file: string, the file full path
 %   - data: 5-D matrix
-%   - info: the the file info, table
+%   - info: the file info, struct
 % Output:
 %   - status: the write status
 
+% Copyright (c) 2022-2024, Weihan Li
+% IMSAVE: 
+% Version: 1.0.0
+%   *** basic saving function
+
+
+[~, ~, ext] = fileparts(file);
+
+switch ext
+    case ".tif"
+    case ".png"
+    case ".gif"
+end
 
 end
 
+function saveTiffFile()
+
+end
+
+function savePngFile()
+
+end
+
+function saveGifFile()
+
+end

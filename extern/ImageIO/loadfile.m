@@ -14,12 +14,10 @@ function [opts,rt,movie,filename] = loadfile(filename,omitif,order_out)
 %
 %   see also: imload
 
-% Copyright (c) 2022-2023, Weihan Li
+% Copyright (c) 2022-2024, Weihan Li
 % LOADFILE: 
-%
-% Verison: 1.2.0
-%   *** using faster library for *.ims data loading
-
+% Verison: 1.0.0
+%   *** basic loading function
 
 arguments
     filename string;

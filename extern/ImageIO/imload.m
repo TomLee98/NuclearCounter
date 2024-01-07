@@ -10,6 +10,17 @@ function [status, info, img] = imload(file, wbar_flag, omitif)
 %           stamp [rt](vector)
 %   - img: the image stack data, 5-D matrix
 
+% Copyright (c) 2022-2024, Weihan Li
+% SAVEFILE: 
+% Version: 1.0.0
+%   *** basic saving function
+%   *** status indicate the function status
+%   *** many export data format support
+% Version: 1.1.0
+%   *** import *.ims support library for fast reading
+%   *** import *.nd2 support library(extern C) for fast reading
+%   *** import *.tiff support library(extern Python) for fast reading
+
 arguments
     file (1,1) string {mustBeFile};
     wbar_flag (1,1) logical = true;
@@ -173,11 +184,49 @@ info.rt = rt;
 status = 0;
 
 if nargout == 3
-    img = bfOpen3DVolume_reg(file, wbar_flag);
+    if ispc()
+        % only PC support fast loading
+        img = nd2Open3DVolume_reg(file, wbar_flag);
+    elseif isunix()
+        img = bfOpen3DVolume_reg(file, wbar_flag);
+    end
 
      % reconstruct the image stack
     img = imreshape(img, opts);
 end
+
+    function mov = nd2Open3DVolume_reg(file, wbar_flag)
+        if wbar_flag == true
+            fig = uifigure("Visible","off","WindowStyle","modal",...
+                "Resize","off");
+            fig.Position(3:4) = [300, 75];
+            set(fig, "Visible", "on");
+            uiprogressdlg(fig,'Indeterminate','on', ...
+                'Message', '        loading...','Icon','info',...
+                "Interpreter","tex");
+        end
+
+        % use nd2 library load total volumes
+        [FilePointer, ImagePointer, ImageReadOut] = ND2Open(file);
+        numImages = calllib('Nd2ReadSdk', 'Lim_FileGetSeqCount', FilePointer);
+        Num=1:numImages;
+        % mov is a c-by-1 cell, c for channels number
+        mov = ND2Read(FilePointer, ImagePointer, ImageReadOut, Num);
+        ND2Close(FilePointer)
+        clear("FilePointer","ImagePointer","ImageReadOut");
+
+        for n = 2:numel(mov)
+            mov{1} = cat(4, mov{1}, mov{n});
+            mov{n} = [];    % free memory
+        end
+        mov = mov{1};
+        % permute as (Y,X,C,Z(T)): nd2 file fixed dimension order
+        mov = permute(mov, [1,2,4,3]);
+
+        if wbar_flag == true
+            delete(fig);
+        end
+    end
 
     function cOrder = getChannelOrder(info)
         cc = info.getChannelCount(0);
@@ -308,11 +357,58 @@ info.rt = rt;
 status = 0;
 
 if nargout == 3
-    img = bfOpen3DVolume_reg(file, wbar_flag);
+    % check the environment
+    pyflag = isPyReady();
+
+    if pyflag == true
+        img = pyOpen3DVolume_reg(file, wbar_flag);
+    else
+        img = bfOpen3DVolume_reg(file, wbar_flag);
+    end
 
     % reconstruct the image stack
     img = imreshape(img, opts);
 end
+
+    function mov = pyOpen3DVolume_reg(file, wbar_flag)
+        % check the python environment path
+        if count(py.sys.path,'/extern/ImageIO/TIFFRW/load_tiff.py') == 0
+            insert(py.sys.path,int32(0), ...
+                '/extern/ImageIO/TIFFRW/load_tiff.py');
+        end
+        fname = py.str(file);
+        if wbar_flag == true
+            fig = uifigure("Visible","off","WindowStyle","modal",...
+                "Resize","off");
+            fig.Position(3:4) = [300, 75];
+            set(fig, "Visible", "on");
+            uiprogressdlg(fig,'Indeterminate','on', ...
+                'Message', '        loading...','Icon','info',...
+                "Interpreter","tex");
+        end
+        try
+            % imagej stack: 'TZCYXS'
+            mov = pyrunfile("load_tiff.py", "vol", file=fname);
+        catch ME
+            throwAsCaller(ME);
+        end
+        % convert img from ndarray to matlab value
+        mov = cast(mov, dataType);
+        if ndims(mov) == 3
+            mov = permute(mov, [2,3,1]);   % to (Y,X,Z)
+        elseif ndims(mov) == 4
+            mov = permute(mov, [3,4,2,1]); % to (Y,X,Z,T)
+        elseif ndims(mov) == 5
+            mov = permute(mov, [4,5,3,2,1]); % to (Y,X,C,Z,T)
+        else
+            throw(MException("imload:invalidImagesStackDimension", ...
+                "Image stack dimension > 5 is not supported."));
+        end
+
+        if wbar_flag == true && isvalid(fig)
+            delete(fig);
+        end
+    end
 
     function cOrder = getChannelOrder(info)
         cc = info.getChannelCount(0);
