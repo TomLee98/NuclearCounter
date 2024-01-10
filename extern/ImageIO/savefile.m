@@ -85,7 +85,7 @@ else
     s = size(I);
     I = reshape(I,[s(1:2),1,s(3:4)]);   % increase 4D to 5D
     switch ext
-        case {'.tif','.png','.gif'}
+        case {'.tif','.png','.avi'}
             status = savetiff(I, filename, metadata, dimOrder, compr);
         case ".mat"
             save(filename,"I","-mat");% based on htf5 is fast enough

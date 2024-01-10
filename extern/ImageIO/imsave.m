@@ -19,7 +19,7 @@ function status = imsave(file, data, info)
 switch ext
     case ".tif"
     case ".png"
-    case ".gif"
+    case ".avi"
 end
 
 end

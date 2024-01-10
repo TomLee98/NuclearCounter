@@ -1,4 +1,4 @@
-function stat = NuclearCounter3D(filename, varargin)
+function stat = NuclearCounter3D(file, varargin)
 %NUCLEARCOUNTER3D This function help to count KCs number in a volume
 % WARNING: This function require the max resolution image from 1-p confocol
 % microscope for best processing: 2048*2048,dz=1\mum
@@ -7,7 +7,7 @@ function stat = NuclearCounter3D(filename, varargin)
 %   stat = NuclearCounter3D(varargin)
 %
 % input:
-%   - filename: the volume file name or [], supported image format: 
+%   - file: the volume file name or volume matrix, supported image format: 
 %     *.ims, *.nd2, *.tif, note that tiff file need imgopt
 %   - (optional) imopts(table): the options of image, usually comes from
 %     loadfile, if you pass this argument, inner options will be covered
@@ -114,36 +114,42 @@ default_output = struct('is_display', true,...
                         'resolution',300, ...
                         'fr', 10);
 
-addRequired(p,'filename', @(x)validateattributes(x, "string", "scalartext"));
+addRequired(p,'file');
 addOptional(p, 'imopts', default_imopts);
 addOptional(p, 'bkg', default_bkg, @(x)validateattributes(x, {'string', 'numeric'},"scalar"));
 addOptional(p,'animal',default_animal);
 addParameter(p,'imorph',default_imorph);
 addParameter(p,'optimal',default_optimal);
 addParameter(p,'output',default_output);
-parse(p, filename, varargin{:});
+parse(p, file, varargin{:});
 
-filename = p.Results.filename;
+file = p.Results.file;
 background = p.Results.bkg;
 animal = p.Results.animal;
 imorph = p.Results.imorph;
 output = p.Results.output;
 optimal = p.Results.optimal;
 imopts = p.Results.imopts;
-[optlb, optub, nuclear] = genoptbound(animal);
+[optlb, optub, nuclear] = GenOptBound(animal);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% PROGRAM PROCESSURE %%%%%%%%%%%%%%%%%%%%%%%%%%
 stat = struct('omorph', struct('center',[], 'radius',[]), ...
               'n', [], ...
               'imorph', imorph);
 
-if isempty(imopts)
-    [imopts, ~, vol] = loadfile(filename, false);
-else
-    [~, ~, vol] = loadfile(filename, true);
-end
-if isempty(vol)
-    return;
+assert(isstring(file) || isnumeric(file), "NuclearCounter3D:invalidFileArgument", ...
+    "Unsupported argument 'file' type");
+if isstring(file)
+    if isempty(imopts)
+        [imopts, ~, vol] = loadfile(file, false);
+    else
+        [~, ~, vol] = loadfile(file, true);
+    end
+    if isempty(vol)
+        return;
+    end
+elseif isnumeric(file)
+    vol = file;
 end
 
 if numel(size(vol)) == 5 || numel(size(vol)) == 2
@@ -666,55 +672,3 @@ counter_output(v_adjusted, stat.omorph.center, stat.omorph.radius, stat.n, ...
     end
 end
 
-function [lb, ub, nuclear] = genoptbound(animal_info)
-marker = upper(string(animal_info.marker));
-driver = upper(string(animal_info.driver));
-stage = upper(string(animal_info.stage));
-
-switch marker
-    case "MCHERRY"
-        switch driver
-            case "OK107"
-                %     req   ssy   sim   avg   gam
-                lb = [0.85; 0.90; 0.70; 0.01; 0.00];
-                ub = [0.99; 0.99; 1.00; 0.10; 0.75];
-                switch stage
-                    case "L1"
-                        nuclear = struct('radius', 2.1, ...
-                                         'sigma', 0.25, ...
-                                         'color',"r");
-                    case "L2"
-                        nuclear = struct('radius', 2.1, ...
-                                         'sigma', 0.25, ...
-                                         'color',"r");
-                    case "L3"
-                        throw("Unregistered Drosophila develop stage.");
-                    case "ADULT"
-                        throw("Unregistered Drosophila develop stage.");
-                    otherwise
-                        throw("Unknown Drosophila develop stage.");
-                end
-            case "ORCO"
-                % TODO: parameters range modified after supervised learning
-                %     req   ssy   sim   avg   gam
-                lb = [0.85; 0.90; 0.50; 0.02; 0.00];
-                ub = [0.99; 0.99; 1.00; 0.10; 0.95];
-                switch stage
-                    case "L1"
-                        % TODO
-                    case "L2"
-                        throw("Unregistered Drosophila develop stage.");
-                    case "L3"
-                        throw("Unregistered Drosophila develop stage.");
-                    case "ADULT"
-                        throw("Unregistered Drosophila develop stage.");
-                    otherwise
-                        throw("Unknown Drosophila develop stage.");
-                end
-            otherwise
-                throw("Unknown driver genes on Drosophila.");
-        end
-    otherwise
-        throw("Unknown marker genes on Drosophila.");
-end
-end
