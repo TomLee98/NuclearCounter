@@ -295,7 +295,7 @@ frames = info_bf.getPixelsSizeT(0).getValue();
 images = channels*slices*frames;
 dimOrder = string(split(info_bf.getPixelsDimensionOrder(0).getValue(),""));
 dimOrder = dimOrder(strlength(dimOrder)>0)';
-cOrder = getChannelOrder(info_bf);
+cOrder = getChannelOrder(info_bf, omitif);
 dataType = string(info_bf.getPixelsType(0).getValue());
 if dataType == "float"
     dataType = "single";
@@ -393,7 +393,7 @@ end
             throwAsCaller(ME);
         end
         % convert img from ndarray to matlab value
-        mov = cast(mov, dataType);
+        mov = cast(mov.astype('single'), dataType);
         if ndims(mov) == 3
             mov = permute(mov, [2,3,1]);   % to (Y,X,Z)
         elseif ndims(mov) == 4
@@ -410,9 +410,15 @@ end
         end
     end
 
-    function cOrder = getChannelOrder(info)
+    function cOrder = getChannelOrder(info, omitlabel)
         cc = info.getChannelCount(0);
         C = zeros(cc,4,'uint8');
+        if omitlabel == true
+            order = 1:(cc+1);
+            cOrder = ["r","g","b"];
+            cOrder = cOrder(order);
+            return;
+        end
         for k = 0:cc-1
             cinfo = info.getChannelColor(0,k);
             % some format there is no color channel information such as
@@ -461,7 +467,8 @@ end
             dt = seconds(diff([datetime(global_meta_data.get("AcquisitionStart")),...
                 datetime(global_meta_data.get("RecordingDate"))]));
         else
-            warning("The acquire time not found. Frame Indices replaced.");
+            warning("imload:timeStampLost", ...
+                "The acquire time not found. Frame Indices replaced.");
             rt = [];
             return;
         end

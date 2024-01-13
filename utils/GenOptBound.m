@@ -8,7 +8,7 @@ switch marker
         switch driver
             case "OK107"
                 %     req   ssy   sim   avg   gam
-                lb = [0.85; 0.90; 0.70; 0.01; 0.00];
+                lb = [0.85; 0.90; 0.70; 0.00; 0.00];
                 ub = [0.99; 0.99; 1.00; 0.10; 0.75];
                 switch stage
                     case "L1"
@@ -33,7 +33,9 @@ switch marker
                 ub = [0.99; 0.99; 1.00; 0.10; 0.95];
                 switch stage
                     case "L1"
-                        % TODO
+                        nuclear = struct('radius', 2.2, ...
+                                         'sigma', 0.3, ...
+                                         'color',"r");
                     case "L2"
                         throw("Unregistered Drosophila develop stage.");
                     case "L3"

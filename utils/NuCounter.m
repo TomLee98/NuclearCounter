@@ -20,6 +20,7 @@ classdef NuCounter < handle
         center
         radius
         id
+        id_table        % NuIDTable object
         volume
     end
 
@@ -30,15 +31,15 @@ classdef NuCounter < handle
                 animal (1,1) struct = struct('marker', "mCherry", ...
                                              'driver', "OK107", ...
                                              'stage', "L1")
-                imorph (1,1) struct = struct('rehist_quantile', 0.975, ...
-                                             'cir_ssy',0.935, ...
-                                             'simr_th',0.7, ...
-                                             'avgI_th',0.015, ...
-                                             'gamma', 0.55)
-                optimal (1,1) struct = struct('maxitn', 200, ...
+                imorph (1,1) struct = struct('rehist_quantile', 0.92, ...
+                                             'cir_ssy',0.95, ...
+                                             'simr_th',0.85, ...
+                                             'avgI_th',0.02, ...
+                                             'gamma', 0.5)
+                optimal (1,1) struct = struct('maxitn', 25, ...
                                               'tol', 1e-4, ...
                                               'state', 'off', ...
-                                              'srange', [20,30], ...
+                                              'srange', [80,120], ...
                                               'rlx', 2, ...
                                               'trdof', 0.5)
                 bkg (1,1) = 100
@@ -72,6 +73,7 @@ classdef NuCounter < handle
         function Count(this, vol, volopts)
             % call this function for nuclears counting
             % do calculation on vol-volopts dataset
+            this.caller.SetProgressBar(0);
             [center_,radius_,id_,vol_,imorph_] = count(this, vol, volopts);
             this.center = center_;
             this.radius = radius_;
@@ -81,9 +83,9 @@ classdef NuCounter < handle
         end
 
         function r = GetResults(this)
-            r = struct("center", this.center, ...
-                       "radius", this.radius, ...
-                       "id", this.id, ...
+            r = struct("center", {this.center}, ...
+                       "radius", {this.radius}, ...
+                       "id", {this.id}, ...
                        "volume", this.volume, ...
                        "imorph", this.imorph);
         end
@@ -130,29 +132,29 @@ classdef NuCounter < handle
                     imorph = this.imorph;
                 case 'on'
                     % optimize the imaging process parameters
-                    opf = @(x)opfunc(x, vol, volopts, this.nuclear, this.optimal);
+                    opf = @(x)NuCounter.opfunc(x, vol, volopts, this.nuclear, this.optimal);
                     % set the output function
                     gof = @(x,y,z)NuCounter.gaoutfun(x,y,z, this.caller);
 
                     options = optimoptions("ga",...
                         "MaxGenerations", this.optimal.maxitn, ...
-                        "FunctionTolerance",this.optimal.tol, ...
+                        "FunctionTolerance", this.optimal.tol, ...
                         "ConstraintTolerance", sqrt(this.optimal.tol), ...
-                        "PopulationSize",100, ...
-                        "UseParallel", false, ...
-                        "MaxTime", 30, ...
-                        "OutputFcn",gof);
+                        "PopulationSize",35, ...    % as Drosophila cross
+                        "UseParallel", true, ...
+                        "MaxTime", 180, ...         % 3 min stop limit
+                        "OutputFcn", gof);
 
                     % using genetic algorithm to solve the global optimal
                     % problem
-                    % if isempty(gcp("nocreate"))
-                    %     parpool("Processes");
-                    % end
+                    if isempty(gcp("nocreate"))
+                        parpool("Processes");
+                    end
 
                     [mvx, fval] = ga(opf, numel(this.optimal.lb), [],[],[],[], ...
                         this.optimal.lb,this.optimal.ub, [], options);
 
-                    % delete(gcp("nocreate"));
+                    delete(gcp("nocreate"));
 
                     % note that gamma as a hidden variable
                     imorph = struct('rehist_quantile', mvx(1), ...
@@ -160,20 +162,15 @@ classdef NuCounter < handle
                                     'simr_th',         mvx(3), ...
                                     'avgI_th',         mvx(4), ...
                                     'gamma',           mvx(5));
-                    fprintf("Optimal Value: %.2f\n", fval);
-                    fprintf("Optimized Parameters:\n " + ...
-                        "*[Rehist Quantile]     %.3f\n " + ...
-                        "*[Circle Sensitivity]  %.3f\n " + ...
-                        "*[Merge Threshold]     %.3f\n " + ...
-                        "*[Quality Threshold]   %.3f\n ", ...
-                        mvx(1), mvx(2), mvx(3), mvx(4));
+                    this.caller.SetSystemLog(sprintf("Optimal Value: %.2f", fval));
 
                     % rerun the algorithm
                     [vol, center, radius, id] = ...
-                        this.relative_cross(vol, volopts);
+                        NuCounter.relative_cross(vol, volopts, this.nuclear,...
+                                                 this.imorph, this.caller);
             end
 
-            nan_num = sum(cellfun(@(x)sum(isnan(x)), id));
+            % nan_num = sum(cellfun(@(x)sum(isnan(x)), id));
             subset_m = cellfun(@(x)max(x,[],"all","omitmissing"),id, ...
                 "UniformOutput",false);
             if ~all(cellfun(@(x)isempty(x), subset_m))
@@ -182,9 +179,7 @@ classdef NuCounter < handle
                 valid_num = 0;
             end
 
-            fprintf("Nuclear Objects Found: %d\n " + ...
-                "Circles without Belonging: %d\n", ...
-                valid_num, nan_num);
+            this.caller.SetSystemLog(sprintf("Nuclear Objects Found: %d", valid_num));
         end
 
         % rehist: re histogram the bright to enhance contrast
@@ -210,6 +205,26 @@ classdef NuCounter < handle
             if volopts.dataType~="uint8"
                 vol = uint8(double(vol-val_th)*255./double(topval-botval));
             end
+        end
+
+        function [status, info] = anti_over_merge(this)
+            % this function will anti over merge by split the except object
+            % which has low Sphericity
+
+
+        end
+
+        function [status, info] = anti_over_split(this)
+            % this function will anti over split by combine the except object
+            % which has low Sphericity or remove object has low slices
+            % number
+
+            % try to combine the lower slices objects
+        end
+
+        function [status, info] = refine(this)
+            % generate nuclears estimation and refine the results
+            % 
         end
 
     end
@@ -457,12 +472,12 @@ classdef NuCounter < handle
                     r{s-1} = radii_cur;
                     nk(s-1) = sum(new_circles_valid);
                     if ~isempty(caller)
-                        caller.SetSystemInfo("[information] objects detected success");
+                        caller.SetSystemLog("Objects detected success...");
                     end
                 else
                     id{s-1} = [];
                     if ~isempty(caller)
-                        caller.SetSystemInfo("[warning] there may be some artifacts");
+                        caller.SetSystemLog("There may be some artifacts...");
                     end
                 end
 
@@ -472,7 +487,7 @@ classdef NuCounter < handle
                 s = s + 1;
 
                 if ~isempty(caller)
-                    caller.SetProgressBar((s-1)/size(vol, 3));
+                    caller.SetProgressBar((s-2)/(size(vol, 3)-2));
                 end
             end
         end
@@ -480,7 +495,7 @@ classdef NuCounter < handle
         % relative-cross method
         function [v,c,r,id] = relative_cross(vol, volopts, nuclear, imorph, caller)
             if ~isempty(caller)
-                caller.SetSystemInfo("preprocessing...");
+                caller.SetSystemLog("Preprocessing...");
             end
             % remap to [0, 255]
             vol = double(vol - min(vol,[],"all")) ...
@@ -512,8 +527,8 @@ classdef NuCounter < handle
                 caller.SetProgressBar(0.4);
             end
 
-            % use nonlinear transformation for saturation process
-            % enhance the weak intensity part
+            % % use nonlinear transformation for saturation process
+            % % enhance the weak intensity part
             vol = double(vol)/255;
             vol = uint8(vol.^(1-imorph.gamma)*255);
 
@@ -528,10 +543,8 @@ classdef NuCounter < handle
             end
 
             if ~isempty(caller)
-                caller.SetSystemInfo("searching...");
+                caller.SetSystemLog("Searching...");
                 caller.SetProgressBar(0);
-            else
-                caller.SetSystemInfo("optimizing...");
             end
 
             % using the "over-cautious and indecisive" method
@@ -544,11 +557,11 @@ classdef NuCounter < handle
                               'simr_th', mvec(3), ...
                               'avgI_th', mvec(4), ...
                               'gamma',   mvec(5));
-            [~,~,~,counts] = NuCounter.relative_cross(vol,nuclear,volopts,imorph_op, []);
+            [~,~,~,counts] = NuCounter.relative_cross(vol,volopts,nuclear,imorph_op, []);
             ivid_num = sum(cellfun(@(x)sum(isnan(x)), counts));
             subset_m = cellfun(@(x)max(x,[],"all","omitmissing"),counts, ...
                 "UniformOutput",false);
-            if ~all(cellfun(@(x)isempty(x), subset_m))
+            if ~all(cellfun(@(x)(isempty(x)||isnan(x)), subset_m))
                 vid_num = max(cell2mat(subset_m));
             else
                 vid_num = 0;
@@ -557,8 +570,8 @@ classdef NuCounter < handle
             % make the invalid objects less and the valid objects more
             % note that there is one-dimensional infinite square potential well
             % to punish the valid objects number
-            if vid_num <  optimal.srange(1) || vid_num > optimal.srange(2)
-                pvid_num = 0;
+            if (vid_num <  optimal.srange(1)) || (vid_num > optimal.srange(2))
+                pvid_num = -inf;
             else
                 potval = (vid_num-median(optimal.srange))^optimal.rlx;
                 pvid_num = vid_num/(1+tan(pi/2*potval));
@@ -568,48 +581,39 @@ classdef NuCounter < handle
         end
 
         function [state,options,optchanged] = gaoutfun(options,state,flag, caller)
-            persistent h1 history r
+            persistent parx_best      % 
             optchanged = false;
+
             switch flag
                 case 'init'
                     % set caller info and progress bar
-                    caller.SetSystemInfo("Initializing...");
+                    caller.SetSystemLog(sprintf("Initializing...(N=0, V=%.2f)", state.Best(end)));
                     caller.SetProgressBar(0);
-                    caller.Set
+                    pparx = find(state.Score==state.Best(end), 1, "last");
+                    parx = state.Population(pparx, :);
+                    parx_best = parx;
+                    caller.SetImorphArgs(parx);
                 case 'iter'
-                    % Update the history every 10 generations.
-                    if rem(state.Generation,10) == 0
-                        ss = size(history,3);
-                        history(:,:,ss+1) = state.Population;
-                        assignin('base','gapopulationhistory',history);
-                    end
-                    % Find the best objective function, and stop if it is low.
-                    ibest = state.Best(end);
-                    ibest = find(state.Score == ibest,1,'last');
-                    bestx = state.Population(ibest,:);
-                    bestf = gaintobj(bestx);
-                    if bestf <= 0.1
-                        state.StopFlag = 'y';
-                        disp('Got below 0.1')
-                    end
-                    % Update the plot.
-                    figure(h1)
-                    l1 = min(state.Population(:,1));
-                    m1 = max(state.Population(:,1));
-                    l2 = min(state.Population(:,2));
-                    m2 = max(state.Population(:,2));
-                    r.Position = [l1 l2 m1-l1 m2-l2];
-                    pause(0.1)
-                    % Update the fraction of mutation and crossover after 25 generations.
-                    if state.Generation == 25
-                        options.CrossoverFraction = 0.8;
-                        optchanged = true;
+                    caller.SetSystemLog(sprintf("Evolution...(N=%d, V=%.2f)", ...
+                        state.Generation, state.Best(end)));
+                    caller.SetProgressBar(state.Generation/options.MaxGenerations);
+                    pparx = find(state.Score==state.Best(end), 1, "last");
+                    parx = state.Population(pparx, :);
+                    if ~isempty(pparx)
+                        parx_best = parx;
+                        caller.SetImorphArgs(parx); 
                     end
                 case 'done'
-                    % Include the final population in the history.
-                    ss = size(history,3);
-                    history(:,:,ss+1) = state.Population;
-                    assignin('base','gapopulationhistory',history);
+                    caller.SetSystemLog(sprintf("End...(N=%d, V=%.2f)", ...
+                        state.Generation, state.Best(end)));
+                    caller.SetProgressBar(1);
+                    pparx = find(state.Score==state.Best(end), 1, "last");
+                    parx = state.Population(pparx, :);
+                    if ~isempty(pparx)
+                        caller.SetImorphArgs(parx);
+                    else
+                        caller.SetImorphArgs(parx_best);
+                    end
             end
         end
     end
