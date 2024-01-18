@@ -179,6 +179,50 @@ classdef NuViewer < handle
             end
         end
 
+        function Crop(this, type, ROI)
+            % this funciton crop the labels
+            arguments
+                this
+                type (1,1) string {mustBeMember(type, ["XY","Z"])}
+                ROI double {mustBePositive}  % coordinate
+            end
+
+            switch type
+                case "XY"
+                    % iteration at each circle and remove that out of
+                    % boundary
+                    for zidx =  1:numel(this.id)
+                        for cidx = 1:numel(this.id{zidx})
+                            % compare center location
+                            cx = this.center{zidx}(cidx, 1);
+                            cy = this.center{zidx}(cidx, 2);
+                            if (cx <= ROI(1,1)) || (cx >= ROI(2,1)) ...
+                                    || (cy <= ROI(1,2)) || (cy >= ROI(2,2))
+                                this.remove_object(zidx, cidx);
+                            end
+                            % modify the center to new coordinate system
+                            this.center{zidx}(cidx,:) ...
+                                = this.center{zidx}(cidx,:) - ROI(1,:);
+                        end
+                    end
+                    this.volopts.width = ROI(2,1)-ROI(1,1)+1;
+                    this.volopts.height = ROI(2,2)-ROI(1,2)+1;
+                    this.Refresh();
+                case "Z"
+                    for zidx = 1:numel(this.id)
+                        if ~ismember(zidx, ROI)
+                            for cidx = 1:numel(this.id{zidx})
+                                this.remove_object(zidx, cidx);
+                            end
+                        end
+                    end
+                    this.volopts.slices = numel(ROI);
+                    this.Refresh();
+                    this.clean_stack(ROI);
+                otherwise
+            end
+        end
+
         function status = AddObject(this, zidx, cir_id, cir_info)
             % this function add an object to data
             arguments
@@ -443,7 +487,13 @@ classdef NuViewer < handle
             % remove the ROI object
             delete(self);
         end
+
+        function clean_stack(this, roi_z)
+            % Z ROI format, crop
+            this.id = this.id(roi_z);
+            this.center = this.center(roi_z);
+            this.radius = this.radius(roi_z);
+            this.color = this.color(roi_z);
+        end
     end
-
 end
-

@@ -80,6 +80,7 @@ classdef NuCounter < handle
             this.id = id_;
             this.volume = vol_;
             this.imorph = imorph_;
+            this.id_table = NuIDTable(id_);
         end
 
         function r = GetResults(this)
@@ -225,6 +226,8 @@ classdef NuCounter < handle
         function [status, info] = refine(this)
             % generate nuclears estimation and refine the results
             % 
+
+            
         end
 
     end
