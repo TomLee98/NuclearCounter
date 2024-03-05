@@ -33,6 +33,7 @@ classdef NuViewer < handle
     properties(GetAccess=public, Dependent)
         obj_num_tot
         obj_max_exist
+        mask
     end
 
     methods
@@ -42,6 +43,10 @@ classdef NuViewer < handle
 
         function v = get.obj_max_exist(this)
             v = this.id_table.obj_max_exist;
+        end
+
+        function v = get.mask(this)
+            v = this.create_mask();
         end
     end
     
@@ -289,6 +294,25 @@ classdef NuViewer < handle
             unc = sum(isnan(id_z));
             title_ = sprintf("#nuclear = %d, #uncertain = %d", nuc, unc);
             this.caller.SetViewerTitle(title_);
+        end
+
+        function v = create_mask(this)
+            % This function uses rois to create volume mask
+            v = zeros(size(this.volume));
+
+            this.caller.MoveSliceHome();
+            for z = 1:this.volopts.slices
+                % hobj has been refreshed
+                for k = 1:numel(this.hobj)
+                    if ~isempty(this.hobj{k})
+                        msk =  createMask(this.hobj{k});
+                        v(:,:,z) = v(:,:,z) + ...           % weighted or
+                            str2double(this.hobj{k}.Label)*msk;
+                    end
+                end
+
+                this.caller.MoveSliceNext();
+            end
         end
 
         function gen_colormap(this)

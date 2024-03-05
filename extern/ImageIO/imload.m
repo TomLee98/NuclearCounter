@@ -37,6 +37,8 @@ if nargout == 3
             [status, info, img] = loadNd2File(file, wbar_flag);
         case ".tif"
             [status, info, img] = loadTiffFile(file, wbar_flag, omitif);
+        case ".mat"
+            [status, info, img] = LoadMatFile(file);
         otherwise
             error("Unsupported file format.");
     end
@@ -48,6 +50,8 @@ elseif nargout == 2
             [status, info] = loadNd2File(file, wbar_flag);
         case ".tif"
             [status, info] = loadTiffFile(file, wbar_flag, omitif);
+        case ".mat"
+            [status, info] = LoadMatFile(file);
         otherwise
             error("Unsupported file format.");
     end
@@ -512,4 +516,17 @@ end
             opts.(bindingArray(2,Loc(4))),...
             opts.(bindingArray(2,Loc(5))));
     end
+end
+
+function [status, info, img] = LoadMatFile(file)
+if nargout == 3
+    data = load(file, "-mat", "vol", "opts");
+    opts = data.opts;
+    img = data.vol;
+else
+    opts = load(file, "-mat", "opts").opts;
+end
+info.opts = opts;
+info.rt = 0;
+status = 0;
 end
