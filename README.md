@@ -1,2 +1,3 @@
 # NuclearCounter
-This nuclear counter for counting number
+## 该项目为 MATLAB App 项目，用于对三维体积内的细胞核等球状物体的检测。
+## 物体识别结合自动/手动方法，包含多种格式结果导出。
